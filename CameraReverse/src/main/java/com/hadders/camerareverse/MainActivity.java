@@ -1,14 +1,21 @@
 package com.hadders.camerareverse;
 
-import com.hadders.camerareverse.util.SystemUiHider;
-
 import android.annotation.TargetApi;
 import android.app.Activity;
+import android.graphics.Matrix;
+import android.graphics.SurfaceTexture;
+import android.hardware.Camera;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
+import android.util.Log;
 import android.view.MotionEvent;
+import android.view.TextureView;
 import android.view.View;
+
+import com.hadders.camerareverse.util.SystemUiHider;
+
+import java.io.IOException;
 
 /**
  * An example full-screen activity that shows and hides the system UI (i.e.
@@ -16,7 +23,7 @@ import android.view.View;
  *
  * @see SystemUiHider
  */
-public class MainActivity extends Activity {
+public class MainActivity extends Activity implements TextureView.SurfaceTextureListener {
     /**
      * Whether or not the system UI should be auto-hidden after
      * {@link #AUTO_HIDE_DELAY_MILLIS} milliseconds.
@@ -45,6 +52,11 @@ public class MainActivity extends Activity {
      */
     private SystemUiHider mSystemUiHider;
 
+    private Camera mCamera;
+
+    private TextureView mTextureView;
+
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -52,11 +64,12 @@ public class MainActivity extends Activity {
         setContentView(R.layout.main_screen);
 
         final View controlsView = findViewById(R.id.fullscreen_content_controls);
-        final View contentView = findViewById(R.id.fullscreen_content);
+        mTextureView = (TextureView) findViewById(R.id.camera_texture);
+        mTextureView.setSurfaceTextureListener(this);
 
         // Set up an instance of SystemUiHider to control the system UI for
         // this activity.
-        mSystemUiHider = SystemUiHider.getInstance(this, contentView, HIDER_FLAGS);
+        mSystemUiHider = SystemUiHider.getInstance(this, mTextureView, HIDER_FLAGS);
         mSystemUiHider.setup();
         mSystemUiHider
                 .setOnVisibilityChangeListener(new SystemUiHider.OnVisibilityChangeListener() {
@@ -97,7 +110,7 @@ public class MainActivity extends Activity {
                 });
 
         // Set up the user interaction to manually show or hide the system UI.
-        contentView.setOnClickListener(new View.OnClickListener() {
+        mTextureView.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
                 if (TOGGLE_ON_CLICK) {
@@ -155,5 +168,71 @@ public class MainActivity extends Activity {
     private void delayedHide(int delayMillis) {
         mHideHandler.removeCallbacks(mHideRunnable);
         mHideHandler.postDelayed(mHideRunnable, delayMillis);
+    }
+
+    @Override
+    public void onSurfaceTextureAvailable(SurfaceTexture surfaceTexture, int width, int height) {
+        Camera.CameraInfo info = new Camera.CameraInfo();
+        for (int i = 0; i < Camera.getNumberOfCameras(); i++) {
+            Camera.getCameraInfo(i, info);
+
+            if (info.facing == Camera.CameraInfo.CAMERA_FACING_FRONT) {
+                mCamera = Camera.open(i);
+                break;
+            }
+        }
+
+        mCamera.setDisplayOrientation(90);
+
+        // Front faced cameras mirror the image so we must convert it back in
+        // the x-plane
+        Matrix matrix = new Matrix();
+        matrix.setScale(-1, 1);
+        matrix.postTranslate(width, 0);
+        mTextureView.setTransform(matrix);
+
+        try {
+            /* Tell the camera to write onto our textureView mTextureView */
+            mCamera.setPreviewTexture(surfaceTexture);
+            mCamera.startPreview();
+        } catch (IOException ioe) {
+            Log.e("camera", ioe.getMessage());
+        }
+    }
+
+    @Override
+    public void onSurfaceTextureSizeChanged(SurfaceTexture surfaceTexture, int i, int i2) {
+
+    }
+
+    @Override
+    public boolean onSurfaceTextureDestroyed(SurfaceTexture surfaceTexture) {
+        if (null != mCamera) {
+            mCamera.stopPreview();
+            mCamera.release();
+        }
+        return true;
+    }
+
+    @Override
+    public void onSurfaceTextureUpdated(SurfaceTexture surfaceTexture) {
+        //This is where you get the image to check for barcode
+
+        //Bitmap barcodeBmp = mTextureView.getBitmap();
+
+        //Process
+    }
+
+    public void onPause() {
+        super.onPause();
+        releaseCamera();
+    }
+
+    private void releaseCamera() {
+        if (mCamera != null) {
+            mCamera.setPreviewCallback(null);
+            mCamera.release();
+            mCamera = null;
+        }
     }
 }
