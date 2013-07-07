@@ -1,0 +1,13 @@
+CameraReverse/bin
+CameraReverse/gen
+CameraReverse/build
+.gradle
+local.properties
+.classpath
+.project
+.DS_Store
+lint.xml
+build.xml
+*.iws
+workspace.xml
+tasks.xml
